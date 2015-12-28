@@ -1,0 +1,57 @@
+---
+title: "Motion Tracker Project for Practical Machine Learning"
+output: html_document
+---
+
+In this project we design a model to predict what class of motion a person is doing based on the measurements available.
+First we download the training and testing data.
+```{r, cache = TRUE}
+
+
+set.seed(1)
+library(caret)
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "trainData.csv", method = "curl")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "testData.csv", method = "curl")
+trainData <- read.csv("trainData.csv")
+testData <- read.csv("testData.csv")
+```
+## Data Cleaning
+Many columns in the test data set are blank, so there is no point training on them.  We remove the columns with NA values.  We then create a vector with the names of the remaining columns along with the "classe" column.  This is in preparation for subsetting the training data.
+
+```{r, cache = TRUE}
+completeTestData <- testData[,colSums(is.na(testData)) == 0]
+testVar <- colnames(completeTestData)
+testVar <- c(testVar, "classe")
+```
+Now we choose all columns which are complete in the test data and in the traning data.  At the end, we remove the index column ("X") from the training data because it corrupts the model building process.
+```{r, cache = TRUE}
+trainVar <- colnames(trainData)
+variables <- intersect(testVar, trainVar)
+
+trainData <- trainData[,variables]
+trainData <- trainData[,-1]
+```
+We will incorporate 10 fold cross validation into the model building, but to estimate the out of sample error we remove some data from the training set and put it into a validation set.  There are ~19500 rows in the training data.  We randomly choose 1500 rows and move them to a validation set.
+```{r, cache = TRUE}
+valRows <- sample(nrow(trainData), 1500)
+valData <- trainData[valRows,]
+trainData <- trainData[-valRows,]
+```
+## Model Building and Testing
+Now we build the model.  train_control is used to choose 10 fold cross validation.  We are using boosting (method = "gbm").  It is computationally expensive, but one of the most accurate models available.
+```{r, cache = TRUE, results = "hide"}
+train_control <- trainControl(method="cv", number=10)
+model <- train(classe~., data=trainData, trControl=train_control, method="gbm")
+```
+How does the model perform in sample?  We check predictions against the training set.
+```{r, cache = TRUE}
+inSampPred <- predict(model, trainData[,1:58])
+confusionMatrix(inSampPred, trainData$classe)
+```
+How does the model perform out of sample?  We check predictions against the validation set.
+```{r, cache = TRUE}
+outSampPred <- predict(model, valData[,1:58])
+confusionMatrix(outSampPred, valData$classe)
+```
+This is indeed a successful model, as both the in sample and out of sample error rate are below 1% (since accuracy is above 99%).  As expected, the in sample error rate is slightly lower than the out of sample error rate.
+
